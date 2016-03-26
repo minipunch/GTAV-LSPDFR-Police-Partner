@@ -20,6 +20,10 @@ namespace bodyguardPlugin
         public static Ped bodyguard = null;
         // the player
         public static Ped playerPed = null;
+        // partner count
+        private static int partnerCount = 0;
+        // has spawned once already flag
+        private static bool hasSpawnedAlready = false;
 
         /// <summary>
         /// Defines the entry point of the plugin.
@@ -30,8 +34,8 @@ namespace bodyguardPlugin
             {
                 // Yield to other plugins
                 GameFiber.Yield();
-                // Key to spawn bodyguard (F9)
-                if (Game.IsKeyDown(Keys.F9))
+                // Key to spawn bodyguard (PageUp) - make sure only one exists
+                if (Game.IsKeyDown(Keys.PageUp) && partnerCount < 1)
                 {
                     // assign playerPed character to user's character
                     playerPed = Game.LocalPlayer.Character;
@@ -48,6 +52,14 @@ namespace bodyguardPlugin
                     NativeFunction.Natives.SetPedAsCop(bodyguard, true);
 					// display notification
                     Game.DisplayNotification("Your partner is ready for patrol!");
+                    // increment partner count
+                    partnerCount++;
+                    // set spawned once already flag
+                    hasSpawnedAlready = true;
+                }
+                else if(Game.IsKeyDown(Keys.PageUp) && partnerCount >= 1)
+                {
+                    Game.DisplayNotification("You already have a partner. Cannot have more than one at a time.");
                 }
 
 				// if bodyguard exists, but for some reason is not in the player's group
@@ -64,11 +76,9 @@ namespace bodyguardPlugin
                     // set the proper car target for entry
                     Vehicle leaderVehicle = playerPed.CurrentVehicle;
 
-                    // OLD VERSION : NativeFunction.Natives.TaskGoToEntity(bodyguard, leaderVehicle, 5000, 2.0f, 200, 1073741824, 0);
                     // move the bodyguard to the targetted car
                     bodyguard.Tasks.GoToOffsetFromEntity(leaderVehicle, 0, 5.0f, 3.0f, 2.0f).WaitForCompletion();
 
-                    // OLD VERSION: NativeFunction.Natives.TaskOpenVehicleDoor(bodyguard, leaderVehicle, 0, 1, 2.0f);
                     // enter the vehicle
                     bodyguard.Tasks.EnterVehicle(leaderVehicle, 0).WaitForCompletion();
 
@@ -77,15 +87,58 @@ namespace bodyguardPlugin
                 // If the bodyguard is in a vehicle, while you are not
                 if(bodyguard != null && bodyguard.IsInAnyPoliceVehicle && playerPed.DistanceTo2D(bodyguard.GetOffsetPosition(Vector3.RelativeFront)) > 5f)
                 {
-                    // OLD VERSION: NativeFunction.Natives.TaskLeaveVehicle(bodyguard, bodyguard.CurrentVehicle, 1);
-                    // OLD VERSION: NativeFunction.Natives.TaskGoToEntity(bodyguard, playerPed, 5000, 2.0f, 200, 1073741824, 0);
                     // make the bodyguard get out and follow you
                     bodyguard.Tasks.LeaveVehicle(LeaveVehicleFlags.None).WaitForCompletion();
                     bodyguard.Tasks.GoToOffsetFromEntity(playerPed, 0, 5.0f, 3.0f, 2.0f).WaitForCompletion();
                 }
 
+                // Reset partner count if partner dies or doesn't exist anymore
+                if(hasSpawnedAlready && (!(bodyguard.IsAlive) || !(bodyguard.Exists())))
+                {
+                    partnerCount = 0;
+                    bodyguard = null;
+                }
+
+                // PageDown to make partner "stand down"
+                if(bodyguard != null && Game.IsKeyDown(Keys.PageDown))
+                {
+                    if(bodyguard.IsShooting || bodyguard.IsWeaponReadyToShoot)
+                    {
+                        bodyguard.Tasks.ClearImmediately();
+                        Game.DisplayNotification("Partner's tasks have been cleared! He should now be following you!");
+                    }
+                    else
+                    {
+                        Game.DisplayNotification("Your partner is not shooting or aiming at anything. He should be following you properly.");
+                    }
+                }
+                else if(bodyguard == null && Game.IsKeyDown(Keys.PageDown))
+                {
+                    Game.DisplayNotification("You must spawn a partner first before making him/her stand down!");
+                }
+   
             }
 
         }
     }
 }
+
+/*
+if(bodyguard != null && (bodyguard.IsShooting || bodyguard.IsWeaponReadyToShoot))
+                    {
+                        bodyguard.Tasks.Clear();
+                        // debug msg
+                        if (bodyguard.IsShooting || bodyguard.IsWeaponReadyToShoot)
+                        {
+                            Game.DisplayNotification("DEBUG: Something went wrong. Your partner should be following you, not aiming or shooting.");
+                        }
+                        else
+                        {
+                            Game.DisplayNotification("DEBUG: Success! Parnter has stopped aiming/shooting and should be following you now.");
+                        }
+                    }
+                    else
+                    {
+                        Game.DisplayNotification("DEBUG: You partner is not (or shouldn't be) aiming/shooting at anyone! He should be following you now.");
+                    }
+                    */
